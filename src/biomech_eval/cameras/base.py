@@ -12,18 +12,26 @@ import numpy as np
 
 @dataclass(slots=True)
 class FrameSet:
-    """One synchronized RGB-D sample.
+    """One RGB-D sample with explicit clock domains.
 
-    Color is BGR (OpenCV convention), depth is uint16 in the device's native
-    units, and timestamps are nanoseconds from the host monotonic clock unless
-    the backend provides a more appropriate value.
+    ``device_timestamp_us`` is the primary device-clock timestamp (depth is
+    preferred when available). ``system_timestamp_us`` is the SDK's host-clock
+    receipt timestamp. ``host_received_ns`` is this process's wall-clock time
+    immediately after receiving the frame set. None means the backend did not
+    provide that timestamp. Color is BGR; depth is uint16 in native units.
     """
 
-    timestamp_ns: int
+    frame_number: int
+    device_timestamp_us: int | None
+    system_timestamp_us: int | None
+    host_received_ns: int
     color: np.ndarray | None
     depth: np.ndarray | None
-    depth_scale: float = 0.001
-    frame_number: int = 0
+    depth_scale_m: float = 0.001
+    color_device_timestamp_us: int | None = None
+    depth_device_timestamp_us: int | None = None
+    color_system_timestamp_us: int | None = None
+    depth_system_timestamp_us: int | None = None
 
 
 class Camera(ABC):
@@ -49,7 +57,7 @@ class Camera(ABC):
         self.stop()
 
 
-def host_timestamp_ns() -> int:
-    """Return a wall-clock timestamp suitable for session metadata."""
+def host_received_ns() -> int:
+    """Return wall-clock receipt time in Unix nanoseconds (not monotonic)."""
 
     return time_ns()

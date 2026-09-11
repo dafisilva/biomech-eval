@@ -12,7 +12,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from .base import Camera, FrameSet, host_timestamp_ns
+from .base import Camera, FrameSet, host_received_ns
 
 
 class OrbbecCamera(Camera):
@@ -23,14 +23,13 @@ class OrbbecCamera(Camera):
         self.enable_depth = enable_depth
         self._pipeline: Any | None = None
         self._frame_number = 0
-        self._depth_scale = 0.001
 
     def start(self) -> None:
         if self._pipeline is not None:
             return
 
         try:
-            from pyorbbecsdk import Config, OBSensorType, Pipeline
+            from pyorbbecsdk import Config, OBSensorType, Pipeline  # type: ignore[import-untyped]
         except ImportError as exc:  # pragma: no cover - depends on machine setup
             raise RuntimeError(
                 "Orbbec SDK is unavailable. Install it with "
@@ -63,15 +62,31 @@ class OrbbecCamera(Camera):
         if frames is None:
             return None
 
-        color = _color_array(frames.get_color_frame()) if self.enable_color else None
-        depth = _depth_array(frames.get_depth_frame()) if self.enable_depth else None
+        color_frame = frames.get_color_frame() if self.enable_color else None
+        depth_frame = frames.get_depth_frame() if self.enable_depth else None
+        color = _color_array(color_frame)
+        depth = _depth_array(depth_frame)
+        color_device_ts = _timestamp_us(color_frame, "get_timestamp_us")
+        depth_device_ts = _timestamp_us(depth_frame, "get_timestamp_us")
+        color_system_ts = _timestamp_us(color_frame, "get_system_timestamp_us")
+        depth_system_ts = _timestamp_us(depth_frame, "get_system_timestamp_us")
+        depth_scale = _depth_scale_m(depth_frame)
+        frame_number = (
+            _frame_index(depth_frame) or _frame_index(color_frame) or self._frame_number + 1
+        )
         self._frame_number += 1
         return FrameSet(
-            timestamp_ns=host_timestamp_ns(),
+            frame_number=frame_number,
+            device_timestamp_us=depth_device_ts or color_device_ts,
+            system_timestamp_us=depth_system_ts or color_system_ts,
+            host_received_ns=host_received_ns(),
             color=color,
             depth=depth,
-            depth_scale=self._depth_scale,
-            frame_number=self._frame_number,
+            depth_scale_m=depth_scale,
+            color_device_timestamp_us=color_device_ts,
+            depth_device_timestamp_us=depth_device_ts,
+            color_system_timestamp_us=color_system_ts,
+            depth_system_timestamp_us=depth_system_ts,
         )
 
     def stop(self) -> None:
@@ -109,3 +124,31 @@ def _depth_array(frame: Any) -> np.ndarray | None:
     height, width = video.get_height(), video.get_width()
     raw = np.asanyarray(video.get_data())
     return np.frombuffer(raw, dtype=np.uint16, count=height * width).reshape(height, width).copy()
+
+
+def _timestamp_us(frame: Any, method: str) -> int | None:
+    """Read an SDK timestamp, returning None for missing/invalid metadata."""
+
+    if frame is None or not hasattr(frame, method):
+        return None
+    try:
+        value = int(getattr(frame, method)())
+    except (TypeError, ValueError, RuntimeError):
+        return None
+    return value if value > 0 else None
+
+
+def _frame_index(frame: Any) -> int | None:
+    value = _timestamp_us(frame, "get_index")
+    return value
+
+
+def _depth_scale_m(frame: Any) -> float:
+    if frame is None or not hasattr(frame, "get_depth_scale"):
+        return 0.001
+    try:
+        # Orbbec's depth scale converts native depth values to millimetres;
+        # convert that scale to metres for the project-wide contract.
+        return float(frame.get_depth_scale()) * 0.001
+    except (TypeError, ValueError, RuntimeError):
+        return 0.001

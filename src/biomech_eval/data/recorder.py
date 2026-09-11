@@ -6,7 +6,7 @@ import csv
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Self
+from typing import Self, TextIO
 
 import cv2
 
@@ -20,7 +20,7 @@ class SessionRecorder:
         self.root = root
         self.camera_name = camera_name
         self.session_dir: Path | None = None
-        self._index_file: object | None = None
+        self._index_file: TextIO | None = None
         self._writer: csv.DictWriter[str] | None = None
 
     def __enter__(self) -> Self:
@@ -37,17 +37,41 @@ class SessionRecorder:
         self._index_file = (session / "frames.csv").open("w", newline="", encoding="utf-8")
         self._writer = csv.DictWriter(
             self._index_file,
-            fieldnames=["frame_number", "timestamp_ns", "color", "depth", "depth_scale"],
+            fieldnames=[
+                "frame_number",
+                "device_timestamp_us",
+                "system_timestamp_us",
+                "host_received_ns",
+                "color_device_timestamp_us",
+                "depth_device_timestamp_us",
+                "color_system_timestamp_us",
+                "depth_system_timestamp_us",
+                "color",
+                "depth",
+                "depth_scale_m",
+            ],
         )
         self._writer.writeheader()
         (session / "metadata.json").write_text(
-            json.dumps({"camera": self.camera_name, "created_utc": stamp}, indent=2),
+            json.dumps(
+                {
+                    "camera": self.camera_name,
+                    "created_utc": stamp,
+                    "timestamp_units": {
+                        "device_timestamp_us": "microseconds, device clock",
+                        "system_timestamp_us": "microseconds, SDK host clock",
+                        "host_received_ns": "nanoseconds since Unix epoch, process receipt time",
+                    },
+                    "depth_scale_units": "metres per native uint16 depth unit",
+                },
+                indent=2,
+            ),
             encoding="utf-8",
         )
         return self
 
     def write(self, frame: FrameSet) -> None:
-        if self.session_dir is None or self._writer is None:
+        if self.session_dir is None or self._writer is None or self._index_file is None:
             raise RuntimeError("Recorder is not open")
         stem = f"{frame.frame_number:08d}"
         color_name = depth_name = ""
@@ -62,17 +86,23 @@ class SessionRecorder:
         self._writer.writerow(
             {
                 "frame_number": frame.frame_number,
-                "timestamp_ns": frame.timestamp_ns,
+                "device_timestamp_us": frame.device_timestamp_us,
+                "system_timestamp_us": frame.system_timestamp_us,
+                "host_received_ns": frame.host_received_ns,
+                "color_device_timestamp_us": frame.color_device_timestamp_us,
+                "depth_device_timestamp_us": frame.depth_device_timestamp_us,
+                "color_system_timestamp_us": frame.color_system_timestamp_us,
+                "depth_system_timestamp_us": frame.depth_system_timestamp_us,
                 "color": color_name,
                 "depth": depth_name,
-                "depth_scale": frame.depth_scale,
+                "depth_scale_m": frame.depth_scale_m,
             }
         )
-        self._index_file.flush()  # type: ignore[union-attr]
+        self._index_file.flush()
 
     def __exit__(self, _type: object, _value: object, _traceback: object) -> None:
         if self._index_file is not None:
-            self._index_file.close()  # type: ignore[union-attr]
+            self._index_file.close()
         self._index_file = None
         self._writer = None
 

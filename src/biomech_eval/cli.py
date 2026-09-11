@@ -82,7 +82,7 @@ def preview() -> None:
                 if frame.color is not None:
                     images.append(frame.color)
                 if frame.depth is not None:
-                    images.append(_depth_preview(frame.depth, depth_scale=frame.depth_scale))
+                    images.append(_depth_preview(frame.depth, depth_scale=frame.depth_scale_m))
                 if images:
                     preview_image = _compose_preview(images)
                     if preview_image is not None:
