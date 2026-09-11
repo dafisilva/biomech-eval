@@ -1,0 +1,43 @@
+[project]
+name = "biomech-eval"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "dafisilva00", email = "dafisilva00@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.4.6",
+    "opencv-python>=5.0.0.93",
+    "pandas>=3.0.5",
+    "pydantic>=2.13.5",
+    "pyorbbecsdk2>=2.0.18",
+    "pyyaml>=6.0.3",
+    "rich>=15.0.0",
+    "scipy>=1.17.1",
+    "typer>=0.27.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.28,<0.12.0"]
+build-backend = "uv_build"
+
+[project.scripts]
+biomech = "biomech_eval.cli:app"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.7",
+]
