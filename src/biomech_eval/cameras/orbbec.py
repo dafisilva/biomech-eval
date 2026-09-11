@@ -18,9 +18,16 @@ from .base import Camera, FrameSet, host_received_ns
 class OrbbecCamera(Camera):
     """Capture color and depth frames using OrbbecSDK v2."""
 
-    def __init__(self, *, enable_color: bool = True, enable_depth: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        enable_color: bool = True,
+        enable_depth: bool = True,
+        align_depth_to_color: bool = False,
+    ) -> None:
         self.enable_color = enable_color
         self.enable_depth = enable_depth
+        self.align_depth_to_color = align_depth_to_color
         self._pipeline: Any | None = None
         self._frame_number = 0
 
@@ -29,7 +36,12 @@ class OrbbecCamera(Camera):
             return
 
         try:
-            from pyorbbecsdk import Config, OBSensorType, Pipeline  # type: ignore[import-untyped]
+            from pyorbbecsdk import (  # type: ignore[import-untyped]
+                Config,
+                OBAlignMode,
+                OBSensorType,
+                Pipeline,
+            )
         except ImportError as exc:  # pragma: no cover - depends on machine setup
             raise RuntimeError(
                 "Orbbec SDK is unavailable. Install it with "
@@ -43,7 +55,13 @@ class OrbbecCamera(Camera):
                 config.enable_stream(OBSensorType.COLOR_SENSOR)
             if self.enable_depth:
                 config.enable_stream(OBSensorType.DEPTH_SENSOR)
+            if self.align_depth_to_color:
+                if not (self.enable_color and self.enable_depth):
+                    raise ValueError("Depth-to-color alignment requires both streams")
+                config.set_align_mode(OBAlignMode.HW_MODE)
             pipeline.start(config)
+            if self.align_depth_to_color:
+                pipeline.enable_frame_sync()
         except Exception:
             # A partially started native pipeline must be stopped before the
             # exception escapes, otherwise the next attempt may fail.

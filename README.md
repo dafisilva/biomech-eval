@@ -27,6 +27,27 @@ Each recording is written to a timestamped directory containing lossless PNG
 color/depth frames, `frames.csv` for synchronization, and `metadata.json`.
 Raw recordings are intentionally excluded from Git.
 
+## MediaPipe pose prototype
+
+Download Google's lightweight Pose Landmarker model once:
+
+```powershell
+New-Item -ItemType Directory -Force models
+Invoke-WebRequest -Uri "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task" -OutFile "models/pose_landmarker_lite.task"
+```
+
+Then connect the camera and run:
+
+```powershell
+uv sync
+uv run biomech pose
+```
+
+The left panel overlays the 33-point MediaPipe skeleton on RGB and labels major
+joints with sensor depth in metres. The right panel shows the same skeleton on
+the hardware-aligned depth image. Press `q` or Escape to stop. This is an
+exploratory visualization, not yet a calibrated biomechanics measurement.
+
 ## Development checks
 
 ```powershell

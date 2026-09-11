@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import monotonic_ns
 from typing import Annotated
 
 import cv2
@@ -11,6 +12,7 @@ import typer
 
 from biomech_eval.cameras.orbbec import OrbbecCamera
 from biomech_eval.data.recorder import SessionRecorder, record
+from biomech_eval.pose import PoseDetector, add_depth_to_poses, draw_poses
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -87,6 +89,49 @@ def preview() -> None:
                     preview_image = _compose_preview(images)
                     if preview_image is not None:
                         cv2.imshow("biomech_eval", preview_image)
+                if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
+                    break
+    except KeyboardInterrupt:
+        pass
+    finally:
+        cv2.destroyAllWindows()
+
+
+@app.command()
+def pose(
+    model: Annotated[
+        Path,
+        typer.Option("--model", help="MediaPipe Pose Landmarker .task model."),
+    ] = Path("models/pose_landmarker_lite.task"),
+    confidence: Annotated[
+        float,
+        typer.Option(min=0.0, max=1.0, help="Detection and tracking confidence threshold."),
+    ] = 0.5,
+) -> None:
+    """Preview a MediaPipe skeleton with metric depth at major joints."""
+
+    if not model.is_file():
+        raise typer.BadParameter(
+            f"model file not found: {model}. Download the lite model as described in README.md",
+            param_hint="--model",
+        )
+
+    camera = OrbbecCamera(align_depth_to_color=True)
+    try:
+        with PoseDetector(model, min_confidence=confidence) as detector, camera:
+            while True:
+                frame = camera.read()
+                if frame is None or frame.color is None:
+                    continue
+                poses = detector.detect(frame.color, monotonic_ns() // 1_000_000)
+                poses = add_depth_to_poses(poses, frame.depth, frame.depth_scale_m)
+                images = [draw_poses(frame.color, poses, show_depth=True)]
+                if frame.depth is not None:
+                    depth_image = _depth_preview(frame.depth, depth_scale=frame.depth_scale_m)
+                    images.append(draw_poses(depth_image, poses))
+                preview_image = _compose_preview(images)
+                if preview_image is not None:
+                    cv2.imshow("biomech_eval pose", preview_image)
                 if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
                     break
     except KeyboardInterrupt:

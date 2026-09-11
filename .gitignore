@@ -24,3 +24,6 @@ data/external/
 artifacts/checkpoints/
 artifacts/exported_models/
 artifacts/reports/
+
+# Downloaded MediaPipe task bundles
+models/*.task
